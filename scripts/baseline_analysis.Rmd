@@ -11,16 +11,26 @@ pacman::p_load(org.Hs.eg.db, dplyr, tidyverse, fuzzyjoin, stringr, openxlsx, wri
 
 conflict_prefer("filter","dplyr")
 conflict_prefer("select", "dplyr")
-conflict_prefer("slice", "dplyr")
 conflict_prefer("biplot", "PCAtools")
+conflict_prefer("slice", "dplyr")
 
 options(dplyr.summarise.inform = FALSE)
 ```
 
 ```{r set directory, include=FALSE}
-#SET PATH HERE
-knitr::opts_knit$set(root.dir = "")
-#SET PATH HERE
+path1 = "/Volumes/labs/Home/Jen Jen Yeh Lab/Yi/Projects/MIB/Analysis2/baseline_analysis"
+path2 = "P:/Jen Jen Yeh Lab/Yi/Projects/MIB/Analysis2/baseline_analysis"
+path3 = "Z:/Yi/Projects/MIB/Analysis2/baseline_analysis"
+
+if (dir.exists(path1)) {
+  knitr::opts_knit$set(root.dir = path1)
+} else if (dir.exists(path2)) {
+  knitr::opts_knit$set(root.dir = path2)
+} else if (dir.exists(path3)) {
+  knitr::opts_knit$set(root.dir = path3)
+} else {
+  stop("None of the specified paths exist. Please check the paths.")
+}
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(warning = FALSE)
@@ -1336,14 +1346,11 @@ corrplots_line_run
 ```
 
 ```{r RNAseq graphs data, echo = FALSE, include=FALSE}
-RNA_meta_MIB <- m_rna[grepl("^PDX$", m_rna$Type),]
-RNA_meta_MIB <- RNA_meta_MIB[match(m2$linems, RNA_meta_MIB$Experiment),]
-RNA_meta_MIB <- RNA_meta_MIB[!is.na(RNA_meta_MIB$Sample),]
-line_key <- aggregate(line ~ line_trunc, unique(data.frame(line = m2$line2, line_trunc = m2$line)), paste)
-RNA_meta_MIB2 <- RNA_meta_MIB %>% left_join(line_key, by = ("line"))
+RNA_meta_MIB <- m_rna
+RNA_meta_MIB2 <- m_rna
 
-RNA_ex_MIB <- RNA_ex[,match(RNA_meta_MIB$Sample, names(RNA_ex))]
-RNA_ex_ENSG_MIB <- RNA_ex_ENSG[,match(RNA_meta_MIB$Sample, names(RNA_ex_ENSG))]
+RNA_ex_MIB <- RNA_ex[,match(RNA_meta_MIB$ID, names(RNA_ex))]
+RNA_ex_ENSG_MIB <- RNA_ex_ENSG[,match(RNA_meta_MIB$ID, names(RNA_ex_ENSG))]
 
 RNA_ex_MIB_TSP <- RNA_ex_MIB[match(TSP_geneset$gene, rownames(RNA_ex_MIB)),]
 RNA_ex_MIB_TSP_scaled <- data.frame(t(scale(t(as.matrix(RNA_ex_MIB_TSP)))))
@@ -1376,7 +1383,7 @@ datRow_bailey <- as.dist(1-cor(t(as.matrix(RNA_ex_MIB_bailey[match(rownames(RNA_
 
 col_ha1 = columnAnnotation(
   #SSC = ca4,
-  line = as.matrix(RNA_meta_MIB2$line_trunc),
+  line = as.matrix(RNA_meta_MIB2$line),
   col = list(#SSC = c("classical" = "#0331fc", "basal" = "#fc8803"),
     line = col_line),
   simple_anno_size = unit(1, "cm"), height = unit(4, "cm"),
@@ -1389,7 +1396,7 @@ col_ha1 = columnAnnotation(
 
 col_ha2 = columnAnnotation(
   SSC = as.matrix(RNA_meta_MIB2$PurIST),
-  line = as.matrix(RNA_meta_MIB2$line_trunc),
+  line = as.matrix(RNA_meta_MIB2$line),
   col = list(SSC = col_SSC,
              line = col_line),
   simple_anno_size = unit(1, "cm"), height = unit(4, "cm"),
@@ -1614,7 +1621,7 @@ bailey_hm
 
 
 ```{r RNA-prot correlation data, echo = FALSE, include=FALSE}
-m_prot <- m2[match(RNA_meta_MIB$Experiment, m2$linems),]
+m_prot <- m2[match(RNA_meta_MIB$ID, m2$ID),]
 
 #collapsed protein meta
 m_prot_line <- m_prot
@@ -1632,26 +1639,26 @@ m_prot_line <- m_prot_line[match(ID_order, m_prot_line$ID),]
 #collapsed RNA meta
 m_RNA_line <- RNA_meta_MIB2
 
-ID_order <- unique(m_RNA_line$line_trunc) #define order of samples
+ID_order <- unique(m_RNA_line$line) #define order of samples
 
 m_RNA_line <- m_RNA_line %>% 
-  group_by(line_trunc) %>% 
+  group_by(line) %>% 
   summarise_all(concat_unique)
-m_RNA_line <- m_RNA_line[match(ID_order, m_RNA_line$line_trunc),]
+m_RNA_line <- m_RNA_line[match(ID_order, m_RNA_line$line),]
 
 #match protein and RNA expression
 prot <- d.log2[,match(m_prot$ID ,colnames(d.log2))]
-colnames(prot) <- m_prot$linems
+prot <- prot %>% 
+  filter(!rownames(prot) %in% c("FUK","MLK4","ZAK"))
 
-RNA <- RNA_ex[,match(RNA_meta_MIB2$Sample ,colnames(RNA_ex))]
+RNA <- RNA_ex[,match(RNA_meta_MIB2$ID ,colnames(RNA_ex))]
 colnames(RNA) <- RNA_meta_MIB2$Experiment
 RNA <- RNA[match(rownames(prot) ,rownames(RNA)),]
-RNA <- log2(RNA + 1)
 
 #collapse by line
 #RNA
 c_RNA <- data.frame(t(RNA))
-c_RNA$line <- RNA_meta_MIB2$line_trunc
+c_RNA$line <- RNA_meta_MIB2$line
 c_RNA <- c_RNA %>% relocate(line, .before = PDPK1)
 
 c_RNA <- c_RNA %>% 
@@ -1659,7 +1666,7 @@ c_RNA <- c_RNA %>%
   summarise(across(where(is.numeric), mean))
 
 c_RNA <- data.frame((c_RNA))
-c_RNA <- c_RNA[match(m_RNA_line$line_trunc, c_RNA$line),]
+c_RNA <- c_RNA[match(m_RNA_line$line, c_RNA$line),]
 rownames(c_RNA) <- c_RNA$line
 c_RNA$line <- NULL
 c_RNA <- data.frame(t(c_RNA))
@@ -1724,11 +1731,11 @@ basal8 <- ggscatter(c_basal8, x = "RNA", y = "MIB",
   theme(legend.position = "right", legend.title = element_text(size=18),legend.text = element_text(size=18)) + font("xy.text", size = 18) + font("xy", size =18) + font("title", size = 20)
 
 
-png("plots/supp4d.png",width=8,height=8,units="in",res=500)
+png("plots/supp4d.png",width=9,height=6,units="in",res=500)
 classical8
 invisible(dev.off())
 
-png("plots/supp4e.png",width=8,height=8,units="in",res=500)
+png("plots/supp4e.png",width=9,height=6,units="in",res=500)
 basal8
 invisible(dev.off())
 
